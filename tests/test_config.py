@@ -27,6 +27,7 @@ def test_save_then_load_round_trip(tmp_path: Path):
         enable_smart_cleanup=True,
         cleanup_model="llama-3.1-8b-instant",
         cleanup_timeout_ms=2500,
+        enable_usage_tracking=False,
     )
     save_config(p, cfg)
     loaded = load_config(p)

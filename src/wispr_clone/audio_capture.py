@@ -34,6 +34,9 @@ class AudioCapture:
         self._frames: list[np.ndarray] = []
         self._lock = threading.Lock()
         self._recent: deque[np.ndarray] = deque(maxlen=32)  # rolling level buffer
+        # Set during stop(); read by the worker thread to compute Whisper cost.
+        # Safe cross-thread: stop() runs on Tk thread; worker reads after stop().
+        self.last_duration_seconds: float = 0.0
 
     def start(self) -> None:
         if self._stream is not None:
@@ -69,11 +72,13 @@ class AudioCapture:
 
         with self._lock:
             if not self._frames:
+                self.last_duration_seconds = 0.0
                 return b""
             audio = np.concatenate(self._frames)
             self._frames = []
             self._recent.clear()
 
+        self.last_duration_seconds = audio.size / float(self.sample_rate)
         buf = io.BytesIO()
         sf.write(buf, audio, self.sample_rate, format="WAV", subtype="PCM_16")
         return buf.getvalue()

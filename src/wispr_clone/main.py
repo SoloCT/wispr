@@ -17,9 +17,11 @@ from .paths import (
     user_data_dir,
     user_dictionary_path,
     user_log_path,
+    user_usage_log_path,
 )
 from .tray import Tray
 from .transcribe import Transcriber
+from .usage_dialog import UsageDialog
 
 
 def _configure_logging(log_path: Path) -> None:
@@ -195,12 +197,16 @@ def main() -> int:
         ctrl = state_holder["controller"]
         return bool(ctrl and ctrl.smart_cleanup_enabled)
 
+    def on_show_usage() -> None:
+        tk_root.after(0, lambda: UsageDialog(parent=tk_root, usage_path=user_usage_log_path()))
+
     tray = Tray(
         dictionary_paths={"en": dict_en_path, "yue": dict_yue_path},
         on_configure_hotkey_en=on_configure_hotkey_en,
         on_configure_hotkey_yue=on_configure_hotkey_yue,
         on_toggle_smart_cleanup=on_toggle_smart_cleanup,
         is_smart_cleanup_enabled=is_smart_cleanup_enabled,
+        on_show_usage=on_show_usage,
         on_quit=lambda: tk_root.after(0, shutdown),
     )
     state_holder["tray"] = tray

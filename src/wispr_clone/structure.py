@@ -391,9 +391,16 @@ def structure_text(
     client: Any,
     model: str = "llama-3.1-8b-instant",
     timeout_s: float = 3.0,
+    usage_sink: Optional[dict] = None,
 ) -> Optional[str]:
     """Run a single chat-completion pass. Returns the cleaned text on
-    success (after guardrails), or None on rejection / timeout / error."""
+    success (after guardrails), or None on rejection / timeout / error.
+
+    If `usage_sink` is provided, on a successful API call it is populated
+    with `called=True`, `input_tokens`, `output_tokens` (read from
+    `resp.usage`). Sink is left untouched on rejection / failure so the
+    caller can distinguish 'cleanup billed' from 'cleanup attempted but
+    not billable'."""
     try:
         max_tokens = max(64, min(800, int(len(text) * 1.5 / 4)))
         request_client = client.with_options(timeout=timeout_s) if hasattr(client, "with_options") else client
@@ -408,6 +415,11 @@ def structure_text(
         )
         cleaned = resp.choices[0].message.content if resp.choices else ""
         cleaned = (cleaned or "").strip()
+        if usage_sink is not None:
+            usage = getattr(resp, "usage", None)
+            usage_sink["called"] = True
+            usage_sink["input_tokens"] = int(getattr(usage, "prompt_tokens", 0) or 0)
+            usage_sink["output_tokens"] = int(getattr(usage, "completion_tokens", 0) or 0)
     except Exception as e:
         log.warning("smart cleanup failed: %s", type(e).__name__)
         return None
@@ -429,10 +441,15 @@ def apply_structure(
     client: Any,
     model: str,
     timeout_ms: int,
+    usage_sink: Optional[dict] = None,
 ) -> str:
     """Top-level entry point. Tries deterministic splitters first, then the
     LLM gated by `should_structure`. Returns the original text on any
-    skip / failure / rejection."""
+    skip / failure / rejection.
+
+    If `usage_sink` is provided, the LLM path populates it with token
+    counts. Deterministic-splitter paths leave it untouched (they are
+    free — no billable Groq call)."""
     if not text:
         return text
 
@@ -456,6 +473,7 @@ def apply_structure(
         client=client,
         model=model,
         timeout_s=max(0.1, timeout_ms / 1000.0),
+        usage_sink=usage_sink,
     )
     if cleaned is not None:
         log.info("smart cleanup: llm path")

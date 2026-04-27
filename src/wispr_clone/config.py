@@ -17,10 +17,11 @@ DEFAULT_CONFIG = {
     "max_recording_seconds": 90,
     "sample_rate": 16000,
     "mic_device": "",
-    "clipboard_restore_delay_ms": 150,
+    "clipboard_restore_delay_ms": 80,
     "enable_smart_cleanup": False,
     "cleanup_model": "llama-3.1-8b-instant",
     "cleanup_timeout_ms": 3000,
+    "enable_usage_tracking": True,
 }
 
 MAX_RECORDING_SECONDS_LIMIT = 600  # 10 min hard cap; longer hits Groq file-size limits
@@ -62,6 +63,7 @@ class Config:
     enable_smart_cleanup: bool
     cleanup_model: str
     cleanup_timeout_ms: int
+    enable_usage_tracking: bool
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
@@ -96,6 +98,7 @@ class Config:
             enable_smart_cleanup=_coerce_bool(merged["enable_smart_cleanup"], DEFAULT_CONFIG["enable_smart_cleanup"]),
             cleanup_model=str(merged["cleanup_model"]).strip() or DEFAULT_CONFIG["cleanup_model"],
             cleanup_timeout_ms=timeout_ms,
+            enable_usage_tracking=_coerce_bool(merged["enable_usage_tracking"], DEFAULT_CONFIG["enable_usage_tracking"]),
         )
 
 
