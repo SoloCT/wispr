@@ -59,6 +59,7 @@ class Tray:
         on_configure_hotkey_yue: Callable[[], None],
         on_toggle_smart_cleanup: Callable[[], None],
         is_smart_cleanup_enabled: Callable[[], bool],
+        on_show_usage: Callable[[], None],
         on_quit: Callable[[], None],
     ):
         self._dictionary_paths = dictionary_paths
@@ -66,6 +67,7 @@ class Tray:
         self._on_configure_hotkey_yue = on_configure_hotkey_yue
         self._on_toggle_smart_cleanup = on_toggle_smart_cleanup
         self._is_smart_cleanup_enabled = is_smart_cleanup_enabled
+        self._on_show_usage = on_show_usage
         self._on_quit = on_quit
 
         self._icons = {
@@ -90,6 +92,7 @@ class Tray:
                     self._handle_toggle_smart_cleanup,
                     checked=lambda item: self._is_smart_cleanup_enabled(),
                 ),
+                MenuItem("Show usage…", self._handle_show_usage),
                 Menu.SEPARATOR,
                 MenuItem("Quit", self._handle_quit),
             ),
@@ -148,6 +151,9 @@ class Tray:
             self._icon.update_menu()
         except Exception:
             pass
+
+    def _handle_show_usage(self, icon, item) -> None:
+        self._on_show_usage()
 
     def _handle_quit(self, icon, item) -> None:
         self._on_quit()

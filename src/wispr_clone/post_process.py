@@ -29,6 +29,7 @@ def strip_fillers(text: str, lang: str = "en") -> str:
     else:
         out = FILLER_RE_EN.sub("", text)
     out = re.sub(r"\s+([,.;:!?，。；：！？])", r"\1", out)   # space before punctuation (incl. CJK)
+    out = re.sub(r"([,.;:!?])([A-Za-z])", r"\1 \2", out)   # space after ASCII punct before letter
     out = re.sub(r"[,，]\s*[,，]+", ",", out)               # collapse repeated commas
     out = re.sub(r"\s{2,}", " ", out)                      # collapse internal spaces
     out = re.sub(r"^[\s,，]+", "", out).strip()            # leading whitespace/commas

@@ -66,3 +66,9 @@ def legacy_dictionary_path() -> Path:
 
 def user_log_path() -> Path:
     return user_data_dir() / "wispr-clone.log"
+
+
+def user_usage_log_path() -> Path:
+    """Append-only JSONL of per-dictation usage records (count, audio s,
+    chars, cost). One line per take. Used by the tray's Show usage dialog."""
+    return user_data_dir() / "usage.jsonl"

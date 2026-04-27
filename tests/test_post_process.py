@@ -75,3 +75,30 @@ def test_yue_collapses_full_width_commas():
 def test_en_lang_default_unchanged():
     # Existing English path is the default lang.
     assert strip_fillers("um hello") == "Hello"
+
+
+# ---------------- Space-after-punctuation ----------------
+
+def test_inserts_space_after_period_before_letter():
+    assert strip_fillers("Hello world.How are you") == "Hello world. How are you"
+
+
+def test_inserts_space_after_multiple_punctuation():
+    assert strip_fillers("Yes,Indeed.Right!Go") == "Yes, Indeed. Right! Go"
+
+
+def test_preserves_decimal_numbers():
+    assert strip_fillers("Pi is 3.14 today") == "Pi is 3.14 today"
+
+
+def test_preserves_grouped_numbers():
+    assert strip_fillers("Cost is 1,000 dollars") == "Cost is 1,000 dollars"
+
+
+def test_does_not_double_space_when_already_present():
+    assert strip_fillers("Hello. World") == "Hello. World"
+
+
+def test_yue_punctuation_unchanged():
+    # CJK full-width punctuation must NOT get a trailing space inserted.
+    assert strip_fillers("你好。世界", lang="yue") == "你好。世界"
