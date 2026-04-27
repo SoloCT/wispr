@@ -1,0 +1,26 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# PyInstaller artifacts
+*.spec
+
+# Virtual environments
+.venv
+
+# Secrets
+.env
+
+# Audio dumps / debug
+*.wav
+
+# Test cache
+.pytest_cache/
+
+# Runtime logs
+wispr-clone.log
+*.log

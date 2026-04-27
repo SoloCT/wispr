@@ -1,0 +1,8 @@
+# Custom vocabulary for Whisper biasing.
+# One term per line. Lines starting with # are comments.
+# Example:
+Tamcho
+# Anthropic
+# CTranslate2
+
+wtf

@@ -1,0 +1,5 @@
+hotkey = "ctrl+windows"
+max_recording_seconds = 90
+sample_rate = 16000
+mic_device = ""
+clipboard_restore_delay_ms = 150
