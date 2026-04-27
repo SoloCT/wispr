@@ -86,6 +86,7 @@ class Tray:
                 MenuItem("Configure Cantonese hotkey…", self._handle_configure_yue),
                 MenuItem("Edit English dictionary…", self._handle_edit_dict_en),
                 MenuItem("Edit Cantonese dictionary…", self._handle_edit_dict_yue),
+                MenuItem("Edit English brands…", self._handle_edit_brands_en),
                 Menu.SEPARATOR,
                 MenuItem(
                     "Smart cleanup (auto-format lists)",
@@ -131,6 +132,9 @@ class Tray:
 
     def _handle_edit_dict_yue(self, icon, item) -> None:
         self._open_path(self._dictionary_paths.get("yue"))
+
+    def _handle_edit_brands_en(self, icon, item) -> None:
+        self._open_path(self._dictionary_paths.get("brands_en"))
 
     def _open_path(self, path: Path | None) -> None:
         if path is None:
