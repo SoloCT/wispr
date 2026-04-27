@@ -11,12 +11,17 @@ BOTTOM_MARGIN = 80
 BG_COLOR = "#1a1a1a"
 FG_COLOR = "#e6e6e6"
 DOT_RECORDING = "#e54848"
+DOT_RECORDING_YUE = "#4ca6ff"  # blue tint = Cantonese
 DOT_TRANSCRIBING = "#e6c349"
 METER_COLOR = "#4ca6ff"
 METER_BG = "#2a2a2a"
 ALPHA_VISIBLE = 0.92
 FADE_STEPS = 8
 FADE_INTERVAL_MS = 18  # ~150 ms over 8 steps
+
+
+def _recording_color(lang: str) -> str:
+    return DOT_RECORDING_YUE if lang == "yue" else DOT_RECORDING
 
 
 class HUD:
@@ -74,18 +79,22 @@ class HUD:
         self._state: Literal["recording", "transcribing"] = "recording"
         self._fade_job: str | None = None
 
-    def show(self) -> None:
+    def show(self, language: str = "en") -> None:
         self._cancel_fade()
         self._win.attributes("-alpha", ALPHA_VISIBLE)
-        self.set_state("recording")
+        self.set_state("recording", language=language)
         self._position()
         self._win.deiconify()
         self._win.lift()
 
-    def set_state(self, state: Literal["recording", "transcribing"]) -> None:
+    def set_state(
+        self,
+        state: Literal["recording", "transcribing"],
+        language: str = "en",
+    ) -> None:
         self._state = state
         if state == "recording":
-            self._canvas.itemconfig(self._dot, fill=DOT_RECORDING)
+            self._canvas.itemconfig(self._dot, fill=_recording_color(language))
             self._canvas.itemconfig(self._label, text="")
             self._canvas.itemconfig(self._meter_bg, state="normal")
             self._canvas.itemconfig(self._meter_fill, state="normal")

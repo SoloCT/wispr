@@ -2,11 +2,12 @@
 
 Personal Wispr-Flow-style dictation tool for Windows. Hold a hotkey, speak, release — the transcription is pasted into the focused app via Groq Whisper.
 
-- Hold-to-record global hotkey (configurable from the tray menu)
-- Live mic-level meter HUD pinned to the bottom-center of the primary monitor
-- Custom-vocabulary biasing via `dictionary.txt`
-- Conservative filler-word stripping (`um`, `uh`, `er`, `erm`, `ah`)
+- **Two hold-to-record hotkeys**: one for English, one for Cantonese, both reconfigurable from the tray menu
+- Live mic-level meter HUD pinned to the bottom-center of the primary monitor (recording dot tints blue when recording in Cantonese)
+- Per-language custom-vocabulary biasing (`dictionary-en.txt` / `dictionary-yue.txt`)
+- Conservative filler-word stripping (`um`, `uh`, `er`, `erm`, `ah` for English; `嗯`, `呃`, `噉`, `即係`, `嗰個` for Cantonese)
 - Clipboard-with-restore paste — your previous clipboard contents are put back after the paste
+- **Optional smart LLM cleanup**: when enabled, dictations that look like lists are auto-formatted as Markdown bullets via a small Groq Llama call. Off by default; toggle from the tray menu.
 
 ## Requirements
 
@@ -53,11 +54,14 @@ Or use the installed console script:
 wispr-clone
 ```
 
-A grey microphone icon appears in the system tray. Default hotkey is **F9** — hold to record, release to transcribe.
+A grey microphone icon appears in the system tray. There are two hotkeys:
 
-While holding the hotkey:
+- **F9** (default) — record in English.
+- **Ctrl+Alt+Win** (default) — record in Cantonese. Whisper output is biased to Cantonese characters/grammar via a built-in priming prompt; you can extend it with `dictionary-yue.txt`.
 
-1. A small HUD shows at the bottom of the primary monitor with a red dot and a live mic-level meter.
+While holding either hotkey:
+
+1. A small HUD shows at the bottom of the primary monitor with a colored dot (red for English, blue for Cantonese) and a live mic-level meter.
 2. On release, the dot turns yellow and the label reads "Transcribing…".
 3. Once Groq returns, the text is pasted into the focused app and the HUD fades out.
 
@@ -65,15 +69,21 @@ The tray icon's color reflects the current state: grey (idle), red (recording), 
 
 ## User data location
 
-`config.toml`, `dictionary.txt`, and `wispr-clone.log` live in:
+User data lives in:
 
 ```
 %APPDATA%\wispr-clone\
+    config.toml
+    dictionary-en.txt
+    dictionary-yue.txt
+    wispr-clone.log
 ```
 
 (typically `C:\Users\<you>\AppData\Roaming\wispr-clone\`). This directory is created on first run with default contents. Storing user data here means edits survive `dist/` rebuilds and the bundled folder stays clean.
 
-You can open it quickly: Press **Win+R**, type `%APPDATA%\wispr-clone`, hit Enter.
+If you upgrade from an older single-language build that used `dictionary.txt`, the file is renamed to `dictionary-en.txt` automatically on first launch.
+
+You can open the data directory quickly: Press **Win+R**, type `%APPDATA%\wispr-clone`, hit Enter.
 
 The `.env` (Groq API key) is loaded from one of:
 - `.env` next to the running `.exe` (for the bundled build)
@@ -85,62 +95,108 @@ The `.env` (Groq API key) is loaded from one of:
 `config.toml` is created on first run with these defaults:
 
 ```toml
-hotkey = "f9"
+hotkey_english = "f9"
+hotkey_cantonese = "ctrl+alt+windows"
 max_recording_seconds = 90
 sample_rate = 16000
 mic_device = ""
 clipboard_restore_delay_ms = 150
+enable_smart_cleanup = false
+cleanup_model = "llama-3.1-8b-instant"
+cleanup_timeout_ms = 3000
 ```
 
 | Key | Notes |
 | --- | --- |
-| `hotkey` | Any combo `keyboard` accepts: `f9`, `ctrl+space`, `ctrl+shift+d`, `right alt`, etc. Easiest to set via the tray menu. |
+| `hotkey_english` / `hotkey_cantonese` | Any combo `keyboard` accepts: `f9`, `ctrl+space`, `ctrl+shift+d`, `right alt`, etc. Easiest to set via the tray menu. Older configs with a single `hotkey` field migrate automatically into `hotkey_english`. |
 | `max_recording_seconds` | Auto-stop recording after this many seconds (clamped to 1–600). |
 | `sample_rate` | Mic sample rate in Hz. 16 kHz is plenty for Whisper. |
 | `mic_device` | Empty = system default. Otherwise a substring of the device name (e.g. `"Realtek"`). |
 | `clipboard_restore_delay_ms` | How long to wait after Ctrl+V before restoring the previous clipboard contents. |
+| `enable_smart_cleanup` | If true, listing-like dictations are passed through a fast LLM that inserts Markdown bullet/number markers. Off by default. Toggle via the tray menu — the tray writes back to this field. |
+| `cleanup_model` | Groq chat model used by smart cleanup. Default `llama-3.1-8b-instant`. |
+| `cleanup_timeout_ms` | Hard timeout for the cleanup call (clamped 100–30000). On timeout, the un-formatted text is pasted instead. |
 
 ### Tray menu
 
-- **Configure hotkey…** — opens a small dialog. Press your new combo, then click **Save**.
-- **Edit dictionary…** — opens `dictionary.txt` in the system default editor (Notepad on Windows).
+- **Configure English hotkey…** / **Configure Cantonese hotkey…** — open a small dialog. Press your new combo, then click **Save**.
+- **Edit English dictionary…** / **Edit Cantonese dictionary…** — open the relevant per-language file in Notepad.
+- **Smart cleanup (auto-format lists)** — checkmarked toggle. Persisted to `config.toml`.
 - **Quit** — fully shuts down the app.
 
-### Custom dictionary
+### Custom dictionaries
 
-`dictionary.txt` biases transcription toward your jargon, names, and acronyms. One term per line; lines starting with `#` are comments.
+Two files in `%APPDATA%\wispr-clone\` bias transcription per language:
 
-```
-# names
-Tamcho
-Anthropic
-# jargon
-CTranslate2
-SendInput
-```
+- `dictionary-en.txt` — English jargon, names, acronyms.
+- `dictionary-yue.txt` — Cantonese names, terms. Common Cantonese particles (`嘅, 咗, 喺, 唔, 佢, 啱, 嗰, 點解, 唔該`) are baked into the prompt as a *language priming seed* so Whisper biases away from Mandarin Standard Chinese output even with an empty dictionary.
 
-Edits take effect on the next dictation press — no restart required. The dictionary is sent to Whisper as a `prompt`, which has a token budget; we truncate at ~800 characters on a term boundary.
+One term per line; lines starting with `#` are comments. Edits take effect on the next dictation press — no restart required. Prompt budget per language is ~800 characters and is truncated on a term boundary.
 
 ### Filler-word stripping
 
-The default blocklist (`um`, `uh`, `er`, `erm`, `ah` and stretched variants like `umm`, `uhh`) is removed from every transcript before paste. Spacing and punctuation around the removed words are tidied; the first letter is recapitalized. Words that merely *contain* a filler (`umbrella`, `humble`) are left alone.
+- **English**: removes `um`, `uh`, `er`, `erm`, `ah` and stretched variants like `umm`, `uhh`. Words that merely *contain* a filler (`umbrella`, `humble`) are left alone.
+- **Cantonese**: removes `嗯`, `呃`, `噉` and the multi-char fillers `即係`, `嗰個`, `係呢個`. The sentence-final particle `啊` is intentionally **kept** — it carries meaning.
+
+Spacing and punctuation around removed words are tidied. English output has its first letter recapitalized; Cantonese casing is left alone.
+
+### Smart cleanup (optional)
+
+When `enable_smart_cleanup = true` (or toggled on from the tray menu), every transcript runs through three structuring passes, in order. The first match wins; the rest are skipped. If none match, the transcript is pasted unchanged.
+
+**1. Ordinal-list splitter (deterministic, no LLM call)** — when the speaker enumerates with 3+ ordinals (`first … second … third`, `one … two … three`, or `第一 … 第二 … 第三`):
+
+> *"Alright, here's the list of ingredients. So first you need garlic, second salt, third pepper."*
+
+becomes:
+
+```
+Alright, here's the list of ingredients:
+1. garlic
+2. salt
+3. pepper
+```
+
+Verbal ordinals + short lead-ins (`you need`, `we have to`, `should`, `is`, `are`, `to`, `the`, etc.) are stripped from each item. Strong content verbs (`do`, `does`, `did`) are kept.
+
+**2. Comma-list splitter (deterministic, no LLM call)** — when the speaker says 3+ short comma-separated items with no preamble:
+
+> *"eggs, milk, butter, flour"*
+
+becomes:
+
+```
+- eggs
+- milk
+- butter
+- flour
+```
+
+If any part is longer than 15 characters (typical of a preamble like *"I went to the store and got eggs"*), this path declines and the LLM is given a chance.
+
+**3. LLM fallback** — when neither deterministic path matched but the heuristic gate (ordinal run, trigger phrase like *"as a list"*, or 3+ short clauses) suggests structuring, a small LLM (`llama-3.1-8b-instant` via Groq) is asked to insert markers, with explicit permission to drop verbal ordinals and lead-ins. The result is validated against the original by length ratio (0.7–1.3×) and content-token overlap (≥ 85 % after excluding ordinals/pronouns/aux verbs). On failure or timeout, the un-formatted text is pasted.
+
+Pure prose (*"the deployment looks healthy and stable today"*) matches none of the three paths — no LLM call, no extra latency. Most listing-like dictations are now handled by the deterministic paths instantly; only messy mixed cases hit the LLM (~300–800 ms).
 
 ## Project structure
 
 ```
 src/wispr_clone/
-    main.py               # entrypoint: wires up Tk, tray, hotkey, controller
+    main.py               # entrypoint: wires up Tk, tray, hotkeys, controller
     controller.py         # state machine: IDLE → RECORDING → TRANSCRIBING → IDLE
     audio_capture.py      # sounddevice → in-memory WAV bytes + level meter
     transcribe.py         # Groq Whisper REST client
+    structure.py          # heuristic gate + LLM cleanup with guardrails
+    lang.py               # Language enum + Whisper-code helpers
     paste.py              # clipboard-with-restore paste
-    post_process.py       # filler-word stripping + tidy
-    dictionary.py         # custom-vocabulary loading
+    post_process.py       # filler-word stripping (per-language) + tidy
+    dictionary.py         # custom-vocabulary loading + Cantonese priming seed
     hud.py                # frameless Toplevel + mic-level meter
     tray.py               # pystray icon + menu
     hotkey.py             # global hold-to-record hotkey listener
     hotkey_dialog.py      # tray-triggered hotkey capture dialog
     config.py             # config + .env loading, validation, persistence
+    paths.py              # %APPDATA% layout + PyInstaller resource_path
 tests/                    # pytest suite (no Win32 / no Groq calls)
 ```
 

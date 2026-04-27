@@ -58,17 +58,35 @@ When adding new behavior, identify which thread you're on and either stay there 
 
 ### State machine — `Controller` is the single source of truth
 
-`IDLE → RECORDING → TRANSCRIBING → IDLE`. Transitions are guarded by a `threading.Lock` so two fast hotkey presses don't race. Recording auto-stops at `max_recording_seconds`. Errors at any stage call `_reset_to_idle()` and surface via the `on_error` callback (which produces a tray balloon notification). Empty audio / empty transcript silently resets to IDLE.
+`IDLE → RECORDING → TRANSCRIBING → IDLE`. Transitions are guarded by a `threading.Lock` so two fast hotkey presses don't race. The active language is captured at the moment the press lock is acquired (`_active_language`); the worker thread reads it for dictionary path + Whisper language. A second press in either language while non-IDLE is ignored. Recording auto-stops at `max_recording_seconds`. Errors at any stage call `_reset_to_idle()` and surface via `on_error` (tray balloon notification). Empty audio / empty transcript silently resets to IDLE.
 
-The state callback drives the tray icon color (idle / recording / processing); the HUD has its own two visual states (`recording` shows the meter; `transcribing` swaps to a yellow dot + label).
+The state callback drives the tray icon color (idle / recording / processing); the HUD has two visual states (`recording` shows the meter; `transcribing` swaps to a yellow dot + label) and tints the recording dot per language (red for English, blue for Cantonese — same `METER_COLOR` so we don't introduce a brand-new hue).
 
 ### Audio pipeline
 
-`AudioCapture` (sounddevice `InputStream`, mono float32 → int16) buffers full-recording frames and a rolling 32-chunk window for the live meter. `get_current_level()` computes RMS over the most recent ~50 ms, normalized against `LEVEL_RMS_REFERENCE`. On stop, frames are encoded as a single in-memory WAV (PCM_16) via `soundfile` and handed to `Transcriber.transcribe`, which uploads to Groq's `whisper-large-v3-turbo` with `response_format="text"` and an optional `prompt` from the dictionary.
+`AudioCapture` (sounddevice `InputStream`, mono float32 → int16) buffers full-recording frames and a rolling 32-chunk window for the live meter. `get_current_level()` computes RMS over the most recent ~50 ms, normalized against `LEVEL_RMS_REFERENCE`. On stop, frames are encoded as a single in-memory WAV (PCM_16) via `soundfile` and handed to `Transcriber.transcribe`, which uploads to Groq's `whisper-large-v3-turbo` with `response_format="text"`, an optional language code, and an optional prompt built from the per-language dictionary plus (for Cantonese) the `CANTONESE_PRIMING` seed.
 
-The custom dictionary (`dictionary.txt`) is reloaded on every press so edits take effect without a restart. `build_prompt` truncates at a ~800-char budget on a term boundary because Whisper's prompt has a ~244-token limit.
+**Whisper language parameter:** `whisper_code(EN)` returns **None** (auto-detect) on purpose. Passing `language="en"` to the transcriptions endpoint causes Whisper to translate non-English audio into English text — a surprising side effect for a dictation tool. Auto-detect leaves English audio as English and routes Cantonese-on-English-hotkey to Chinese output (so the wrong-hotkey case is obvious instead of silently translated).
 
-`post_process.strip_fillers` is conservative regex-only: only word-boundary `um/uh/er/erm/ah` (and stretched variants) are removed; punctuation/spacing is tidied; the first letter is recapitalized.
+`whisper_code(YUE)` returns `"yue"` (ISO-639-3 — Whisper-large-v3 has explicit Cantonese training). `Transcriber` keeps a sticky `_LANGUAGE_FALLBACKS` table: if Groq rejects `yue` with a "language … invalid" 4xx, the call retries once with `"zh"` and remembers the fallback for the rest of the session.
+
+The Cantonese register problem: with `language="zh"` Whisper tends to render Cantonese audio as **Standard Written Chinese** (書面語: 我們, 的, 了, 東西), which loses the spoken-Cantonese register the user actually said. Even with `language="yue"` the model can drift. `CANTONESE_PRIMING` (in `dictionary.py`) is the strongest mitigation — it's a dense colloquial-Cantonese sample (我哋, 嘅, 咗, 嘢, 喎, 啦, 㗎, 嗰陣) that sets register because Whisper's prompt field is *previous-text context*. Continue in the same style. Do NOT replace it with an instruction sentence ("please transcribe in …") — Whisper interprets prompts as context, so directives confuse the model.
+
+Per-language dictionaries (`dictionary-en.txt`, `dictionary-yue.txt`) are reloaded on every press so edits take effect without a restart. `build_prompt(terms, prefix=...)` truncates at a ~800-char budget on a term boundary because Whisper's prompt has a ~244-token limit. The Cantonese priming sample is prepended via `prefix=` and counted against the same budget.
+
+`post_process.strip_fillers(text, lang)` is conservative regex-only. English: word-boundary `um/uh/er/erm/ah` (+ stretched). Cantonese: global `嗯+/呃+/噉+` plus literal `即係/嗰個/係呢個`. Sentence-final `啊` is intentionally **not** stripped — it carries meaning. Casing is restored only for English; CJK has no case. There is no register-conversion pass — Cantonese register relies entirely on `language="yue"` plus the priming prompt; deterministic substitution tables (e.g. 為什麼→點解) were tried and rejected as too lossy.
+
+### Smart cleanup (`structure.py`)
+
+Optional, gated, runtime-toggleable. Pipeline position: `Whisper → strip_fillers → apply_structure → paste`. `apply_structure` is a no-op when `controller._smart_cleanup_enabled` is False. When enabled it tries three paths in order, returning the original text if none succeed:
+
+1. **`_split_ordinal_list`** — deterministic regex splitter. Matches 3+ ordinals in canonical sequence: `first/second/third` (or `fourth/fifth`), or clause-anchored `one/two/three` (count-words must follow `,`/`.`/`:`/`;` or start-of-text after the first one), or Cantonese `第一/第二/第三`. Carves out segments between markers; per-segment cleanup peels a leading pronoun (`you/we/i/they/it`) and a leading aux verb (`need/needs/have/has/should/can/must/are/is/will/would/then/and/so/also/to/the` — **not** `do/does/did`, those carry content). Optional intro before the first ordinal becomes a "Title:" line. Output: numbered list. No LLM call.
+2. **`_split_comma_list`** — 3+ comma-separated parts where every part is ≤15 chars after stripping. Long preambles disqualify (too risky to deterministically separate intro from items). Output: bulleted list. No LLM call.
+3. **LLM fallback** — gated by `should_structure(text, lang)` (the existing scoring heuristic — ≥2 of: ordinal run, trigger phrase, 3+ short clauses). Calls `structure_text` against the injected Groq client (reusing `Transcriber.client` — no second auth) with a **relaxed** system prompt that explicitly permits dropping verbal ordinals + lead-ins (still forbids paraphrase/translation). Result is validated via `_validate_cleaned`: length ratio 0.7–1.3× plus a token-set check that excludes `_DROPPABLE_TOKENS` (ordinals, pronouns, aux verbs) before computing the 15 % missing-token threshold. On rejection/timeout/exception → original text.
+
+The tray's "Smart cleanup" toggle calls `Controller.set_smart_cleanup(bool)` which persists via `save_config` so the choice survives restart.
+
+Do not re-tighten the system prompt to "preserve every word" — the relaxed prompt is what makes ordinal-drop outputs (e.g. `1. garlic / 2. salt / 3. pepper`) achievable when the LLM is reached. Do not add `do/does/did` to the lead-in regex or the droppable token set — they appear as content verbs in dictation ("first do the build").
 
 ### Paste
 
@@ -76,7 +94,7 @@ The custom dictionary (`dictionary.txt`) is reloaded on every press so edits tak
 
 ### Hotkey + dialog interaction
 
-`HotkeyListener` registers on the trigger key (last token of the combo) and verifies modifiers manually on each event so `keyboard.on_press_key` can fire on hold-to-record. `HotkeyDialog` **stops** the main listener while open so the capture loop can grab any combo without firing dictation; saving calls `set_combo()` (stop + restart with the new combo) and persists via `save_config`. Cancel restores the previous listener.
+Two `HotkeyListener` instances run in parallel — one for English, one for Cantonese — each calling language-tagged controller methods (`on_press_en` / `on_press_yue` etc.). Each listener registers on the trigger key (last token of the combo) and verifies modifiers manually so `keyboard.on_press_key` can fire on hold-to-record. `HotkeyDialog` accepts which `Config` field it edits (`"hotkey_english"` or `"hotkey_cantonese"`) and which listener to restart; it **stops** that listener while open so the capture loop can grab any combo without firing dictation, then `set_combo()`s on save (stop + restart with the new combo) and persists via `save_config`. Cancel restores the listener.
 
 ### Process exit
 

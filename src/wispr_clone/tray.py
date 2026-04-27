@@ -54,12 +54,18 @@ def _load_icon(state: str, fallback_color: tuple[int, int, int]) -> Image.Image:
 class Tray:
     def __init__(
         self,
-        dictionary_path: Path,
-        on_configure_hotkey: Callable[[], None],
+        dictionary_paths: dict[str, Path],
+        on_configure_hotkey_en: Callable[[], None],
+        on_configure_hotkey_yue: Callable[[], None],
+        on_toggle_smart_cleanup: Callable[[], None],
+        is_smart_cleanup_enabled: Callable[[], bool],
         on_quit: Callable[[], None],
     ):
-        self._dictionary_path = dictionary_path
-        self._on_configure_hotkey = on_configure_hotkey
+        self._dictionary_paths = dictionary_paths
+        self._on_configure_hotkey_en = on_configure_hotkey_en
+        self._on_configure_hotkey_yue = on_configure_hotkey_yue
+        self._on_toggle_smart_cleanup = on_toggle_smart_cleanup
+        self._is_smart_cleanup_enabled = is_smart_cleanup_enabled
         self._on_quit = on_quit
 
         self._icons = {
@@ -74,8 +80,16 @@ class Tray:
             menu=Menu(
                 MenuItem("wispr-clone", None, enabled=False),
                 Menu.SEPARATOR,
-                MenuItem("Configure hotkey…", self._handle_configure),
-                MenuItem("Edit dictionary…", self._handle_edit_dictionary),
+                MenuItem("Configure English hotkey…", self._handle_configure_en),
+                MenuItem("Configure Cantonese hotkey…", self._handle_configure_yue),
+                MenuItem("Edit English dictionary…", self._handle_edit_dict_en),
+                MenuItem("Edit Cantonese dictionary…", self._handle_edit_dict_yue),
+                Menu.SEPARATOR,
+                MenuItem(
+                    "Smart cleanup (auto-format lists)",
+                    self._handle_toggle_smart_cleanup,
+                    checked=lambda item: self._is_smart_cleanup_enabled(),
+                ),
                 Menu.SEPARATOR,
                 MenuItem("Quit", self._handle_quit),
             ),
@@ -103,16 +117,35 @@ class Tray:
         except Exception:
             pass
 
-    def _handle_configure(self, icon, item) -> None:
-        self._on_configure_hotkey()
+    def _handle_configure_en(self, icon, item) -> None:
+        self._on_configure_hotkey_en()
 
-    def _handle_edit_dictionary(self, icon, item) -> None:
-        path = str(self._dictionary_path)
+    def _handle_configure_yue(self, icon, item) -> None:
+        self._on_configure_hotkey_yue()
+
+    def _handle_edit_dict_en(self, icon, item) -> None:
+        self._open_path(self._dictionary_paths.get("en"))
+
+    def _handle_edit_dict_yue(self, icon, item) -> None:
+        self._open_path(self._dictionary_paths.get("yue"))
+
+    def _open_path(self, path: Path | None) -> None:
+        if path is None:
+            return
         try:
             if sys.platform == "win32":
-                os.startfile(path)  # type: ignore[attr-defined]
+                os.startfile(str(path))  # type: ignore[attr-defined]
             else:
-                subprocess.Popen(["xdg-open", path])
+                subprocess.Popen(["xdg-open", str(path)])
+        except Exception:
+            pass
+
+    def _handle_toggle_smart_cleanup(self, icon, item) -> None:
+        self._on_toggle_smart_cleanup()
+        # pystray refreshes the checkmark on next menu open via the
+        # `checked=` callable; explicit refresh just nudges the icon thread.
+        try:
+            self._icon.update_menu()
         except Exception:
             pass
 

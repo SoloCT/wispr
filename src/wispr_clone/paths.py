@@ -52,7 +52,15 @@ def user_config_path() -> Path:
     return user_data_dir() / "config.toml"
 
 
-def user_dictionary_path() -> Path:
+def user_dictionary_path(lang: str = "en") -> Path:
+    """Per-language custom-vocabulary file. `en` and `yue` are the supported
+    languages today; anything else still resolves to a `dictionary-<lang>.txt`
+    file so adding a new language is a one-line change."""
+    return user_data_dir() / f"dictionary-{lang}.txt"
+
+
+def legacy_dictionary_path() -> Path:
+    """Pre-bilingual single-file location, kept only for one-time migration."""
     return user_data_dir() / "dictionary.txt"
 
 

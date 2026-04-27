@@ -69,18 +69,21 @@ class HotkeyDialog:
         config_path: Path,
         hotkey_listener: HotkeyListener,
         on_saved: Callable[[str], None] = lambda combo: None,
+        config_field: str = "hotkey_english",
+        title_suffix: str = "English",
     ):
         self._parent = parent
         self._cfg = cfg
         self._config_path = config_path
         self._hotkey_listener = hotkey_listener
         self._on_saved = on_saved
+        self._config_field = config_field
         self._captured: str | None = None
         self._capture_thread: threading.Thread | None = None
         self._cancelled = False
 
         self._win = tk.Toplevel(parent)
-        self._win.title("Configure hotkey")
+        self._win.title(f"Configure {title_suffix} hotkey")
         # Center on primary monitor.
         sw = parent.winfo_screenwidth()
         sh = parent.winfo_screenheight()
@@ -99,9 +102,10 @@ class HotkeyDialog:
             text="Current hotkey:",
             font=("Segoe UI", 9),
         ).pack(pady=(14, 0))
+        current_value = getattr(cfg, self._config_field, "")
         self._current_label = tk.Label(
             self._win,
-            text=cfg.hotkey,
+            text=current_value,
             font=("Segoe UI", 11, "bold"),
         )
         self._current_label.pack()
@@ -165,7 +169,7 @@ class HotkeyDialog:
         if not self._captured:
             return
         new_combo = self._captured
-        self._cfg.hotkey = new_combo
+        setattr(self._cfg, self._config_field, new_combo)
         save_config(self._config_path, self._cfg)
         try:
             self._hotkey_listener.set_combo(new_combo)

@@ -1,5 +1,11 @@
-hotkey = "ctrl+windows"
+# Reference config. Runtime reads %APPDATA%\wispr-clone\config.toml,
+# created on first launch from these defaults. Edit there, not here.
+hotkey_english = "f9"
+hotkey_cantonese = "ctrl+alt+windows"
 max_recording_seconds = 90
 sample_rate = 16000
 mic_device = ""
 clipboard_restore_delay_ms = 150
+enable_smart_cleanup = false
+cleanup_model = "llama-3.1-8b-instant"
+cleanup_timeout_ms = 3000

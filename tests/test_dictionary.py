@@ -35,3 +35,20 @@ def test_build_prompt_truncates_to_budget():
 def test_build_prompt_includes_at_least_first_term_when_budget_tight():
     out = build_prompt(["short", "longer_term_here"], char_budget=10)
     assert "short" in out
+
+
+def test_build_prompt_with_prefix():
+    out = build_prompt(["alpha", "beta"], prefix="嘅, 咗")
+    assert out.startswith("嘅, 咗, ")
+    assert "alpha" in out and "beta" in out
+
+
+def test_build_prompt_prefix_only_when_no_terms():
+    assert build_prompt([], prefix="嘅, 咗") == "嘅, 咗"
+
+
+def test_build_prompt_prefix_counts_against_budget():
+    # prefix `嘅, 咗, 喺` is 7 chars. ", alpha" adds 7 → 14. ", beta" would
+    # push to 20 — over budget=15, so it is dropped on a term boundary.
+    out = build_prompt(["alpha", "beta", "gamma"], char_budget=15, prefix="嘅, 咗, 喺")
+    assert out == "嘅, 咗, 喺, alpha"

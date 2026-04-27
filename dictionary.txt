@@ -2,7 +2,6 @@
 # One term per line. Lines starting with # are comments.
 # Example:
 Tamcho
-# Anthropic
-# CTranslate2
-
-wtf
+Anthropic
+wisprflow
+btw

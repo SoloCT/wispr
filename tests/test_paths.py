@@ -56,5 +56,23 @@ def test_user_paths_share_data_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     base = paths_module.user_data_dir()
     assert paths_module.user_config_path() == base / "config.toml"
-    assert paths_module.user_dictionary_path() == base / "dictionary.txt"
     assert paths_module.user_log_path() == base / "wispr-clone.log"
+
+
+def test_user_dictionary_path_per_language(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    base = paths_module.user_data_dir()
+    assert paths_module.user_dictionary_path("en") == base / "dictionary-en.txt"
+    assert paths_module.user_dictionary_path("yue") == base / "dictionary-yue.txt"
+
+
+def test_user_dictionary_path_default_is_en(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    base = paths_module.user_data_dir()
+    assert paths_module.user_dictionary_path() == base / "dictionary-en.txt"
+
+
+def test_legacy_dictionary_path(monkeypatch, tmp_path):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    base = paths_module.user_data_dir()
+    assert paths_module.legacy_dictionary_path() == base / "dictionary.txt"

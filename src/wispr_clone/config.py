@@ -12,11 +12,15 @@ from dotenv import load_dotenv
 
 
 DEFAULT_CONFIG = {
-    "hotkey": "f9",
+    "hotkey_english": "f9",
+    "hotkey_cantonese": "ctrl+alt+windows",
     "max_recording_seconds": 90,
     "sample_rate": 16000,
     "mic_device": "",
     "clipboard_restore_delay_ms": 150,
+    "enable_smart_cleanup": False,
+    "cleanup_model": "llama-3.1-8b-instant",
+    "cleanup_timeout_ms": 3000,
 }
 
 MAX_RECORDING_SECONDS_LIMIT = 600  # 10 min hard cap; longer hits Groq file-size limits
@@ -30,19 +34,44 @@ def _coerce_int(value: Any, default: int) -> int:
         return default
 
 
+def _coerce_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("true", "1", "yes", "on"):
+            return True
+        if v in ("false", "0", "no", "off", ""):
+            return False
+    return default
+
+
+def _normalize_hotkey(value: Any, default: str) -> str:
+    s = str(value).strip().lower() if value is not None else ""
+    return s or default
+
+
 @dataclass
 class Config:
-    hotkey: str
+    hotkey_english: str
+    hotkey_cantonese: str
     max_recording_seconds: int
     sample_rate: int
     mic_device: str
     clipboard_restore_delay_ms: int
+    enable_smart_cleanup: bool
+    cleanup_model: str
+    cleanup_timeout_ms: int
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
-        merged = {**DEFAULT_CONFIG, **data}
+        # Migration: legacy single `hotkey` field maps to English.
+        if "hotkey" in data and "hotkey_english" not in data:
+            data = {**data, "hotkey_english": data["hotkey"]}
+        # Drop the legacy key so it doesn't round-trip into the saved file.
+        data = {k: v for k, v in data.items() if k != "hotkey"}
 
-        hotkey = str(merged["hotkey"]).strip().lower() or DEFAULT_CONFIG["hotkey"]
+        merged = {**DEFAULT_CONFIG, **data}
 
         max_rec = _coerce_int(merged["max_recording_seconds"], DEFAULT_CONFIG["max_recording_seconds"])
         max_rec = max(1, min(MAX_RECORDING_SECONDS_LIMIT, max_rec))
@@ -54,12 +83,19 @@ class Config:
         restore_ms = _coerce_int(merged["clipboard_restore_delay_ms"], DEFAULT_CONFIG["clipboard_restore_delay_ms"])
         restore_ms = max(0, min(5000, restore_ms))
 
+        timeout_ms = _coerce_int(merged["cleanup_timeout_ms"], DEFAULT_CONFIG["cleanup_timeout_ms"])
+        timeout_ms = max(100, min(30000, timeout_ms))
+
         return cls(
-            hotkey=hotkey,
+            hotkey_english=_normalize_hotkey(merged["hotkey_english"], DEFAULT_CONFIG["hotkey_english"]),
+            hotkey_cantonese=_normalize_hotkey(merged["hotkey_cantonese"], DEFAULT_CONFIG["hotkey_cantonese"]),
             max_recording_seconds=max_rec,
             sample_rate=sample_rate,
             mic_device=str(merged["mic_device"]),
             clipboard_restore_delay_ms=restore_ms,
+            enable_smart_cleanup=_coerce_bool(merged["enable_smart_cleanup"], DEFAULT_CONFIG["enable_smart_cleanup"]),
+            cleanup_model=str(merged["cleanup_model"]).strip() or DEFAULT_CONFIG["cleanup_model"],
+            cleanup_timeout_ms=timeout_ms,
         )
 
 

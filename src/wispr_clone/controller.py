@@ -15,11 +15,14 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .audio_capture import AudioCapture
-from .config import Config
-from .dictionary import build_prompt, load_terms
+from .config import Config, save_config
+from .dictionary import CANTONESE_PRIMING, build_prompt, load_terms
 from .hud import HUD
+from .lang import Language, whisper_code
 from .paste import paste
+from .paths import user_dictionary_path
 from .post_process import strip_fillers
+from .structure import apply_structure
 from .transcribe import Transcriber
 
 log = logging.getLogger(__name__)
@@ -39,7 +42,6 @@ class Controller:
         root: tk.Tk,
         config: Config,
         config_path: Path,
-        dictionary_path: Path,
         transcriber: Transcriber,
         hud: HUD,
         on_state_change: Callable[[State], None] = lambda s: None,
@@ -48,7 +50,6 @@ class Controller:
         self._root = root
         self._config = config
         self._config_path = config_path
-        self._dictionary_path = dictionary_path
         self._transcriber = transcriber
         self._hud = hud
         self._on_state_change = on_state_change
@@ -63,22 +64,54 @@ class Controller:
         self._lock = threading.Lock()
         self._level_poll_job: Optional[str] = None
         self._max_record_job: Optional[str] = None
+        self._active_language: Language = Language.EN
+        self._smart_cleanup_enabled: bool = config.enable_smart_cleanup
 
     # ----- Hotkey callbacks (called from `keyboard` lib's listener thread) -----
 
-    def on_press(self) -> None:
-        self._root.after(0, self._begin_recording)
+    def on_press(self, language: Language = Language.EN) -> None:
+        self._root.after(0, lambda: self._begin_recording(language))
 
-    def on_release(self) -> None:
+    def on_release(self, language: Language = Language.EN) -> None:
+        # Language passed for symmetry; the active language is whatever was
+        # set on press, so we don't need to read it again here.
         self._root.after(0, self._end_recording)
+
+    def on_press_en(self) -> None:
+        self.on_press(Language.EN)
+
+    def on_release_en(self) -> None:
+        self.on_release(Language.EN)
+
+    def on_press_yue(self) -> None:
+        self.on_press(Language.YUE)
+
+    def on_release_yue(self) -> None:
+        self.on_release(Language.YUE)
+
+    # ----- Smart-cleanup runtime toggle -----
+
+    @property
+    def smart_cleanup_enabled(self) -> bool:
+        return self._smart_cleanup_enabled
+
+    def set_smart_cleanup(self, enabled: bool) -> None:
+        self._smart_cleanup_enabled = bool(enabled)
+        self._config.enable_smart_cleanup = self._smart_cleanup_enabled
+        try:
+            save_config(self._config_path, self._config)
+        except Exception:
+            log.exception("failed to persist smart_cleanup toggle")
 
     # ----- Tk-thread methods -----
 
-    def _begin_recording(self) -> None:
+    def _begin_recording(self, language: Language = Language.EN) -> None:
         with self._lock:
             if self._state is not State.IDLE:
                 return
             self._state = State.RECORDING
+            self._active_language = language
+        log.info("press: language=%s", language.value)
         try:
             self._capture.start()
         except Exception as e:
@@ -86,7 +119,7 @@ class Controller:
             self._on_error(f"Mic error: {e}")
             self._state = State.IDLE
             return
-        self._hud.show()
+        self._hud.show(language=language.value)
         self._on_state_change(State.RECORDING)
         self._schedule_level_poll()
         self._max_record_job = self._root.after(
@@ -117,18 +150,38 @@ class Controller:
             self._reset_to_idle()
             return
 
-        self._hud.set_state("transcribing")
+        self._hud.set_state("transcribing", language=self._active_language.value)
         self._on_state_change(State.TRANSCRIBING)
-        self._executor.submit(self._do_transcribe_and_paste, wav_bytes)
+        self._executor.submit(self._do_transcribe_and_paste, wav_bytes, self._active_language)
 
     # ----- Worker-thread method -----
 
-    def _do_transcribe_and_paste(self, wav_bytes: bytes) -> None:
+    def _do_transcribe_and_paste(self, wav_bytes: bytes, language: Language) -> None:
         try:
-            terms = load_terms(self._dictionary_path)
-            prompt = build_prompt(terms)
-            text = self._transcriber.transcribe(wav_bytes, prompt=prompt)
-            text = strip_fillers(text)
+            dict_path = user_dictionary_path(language.value)
+            terms = load_terms(dict_path)
+            prefix = CANTONESE_PRIMING if language is Language.YUE else ""
+            prompt = build_prompt(terms, prefix=prefix)
+            whisper_lang = whisper_code(language)
+            log.info(
+                "transcribe: lang=%s whisper_lang=%s dict=%s prompt_len=%d",
+                language.value, whisper_lang or "auto", dict_path.name, len(prompt),
+            )
+            text = self._transcriber.transcribe(
+                wav_bytes,
+                prompt=prompt,
+                language=whisper_lang,
+            )
+            log.info("transcribe result (len=%d): %r", len(text), text[:120])
+            text = strip_fillers(text, lang=language.value)
+            if self._smart_cleanup_enabled:
+                text = apply_structure(
+                    text,
+                    lang=language.value,
+                    client=self._transcriber.client,
+                    model=self._config.cleanup_model,
+                    timeout_ms=self._config.cleanup_timeout_ms,
+                )
         except Exception as e:
             log.exception("transcription failed")
             self._root.after(0, lambda: self._on_error(f"Transcription failed: {e}"))

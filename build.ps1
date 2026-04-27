@@ -20,9 +20,37 @@ if ($pyExe -notmatch '^[A-Za-z]:\\') {
 }
 Write-Host "Using Python: $pyExe"
 
+# Stop a running wispr-clone.exe so PyInstaller can overwrite the bundle.
+# A running instance keeps file handles open inside dist\ — most often on
+# numpy / Pillow / sounddevice .pyd extensions — which causes Remove-Item
+# to fail with "Access to the path … is denied".
+$running = Get-Process -Name "wispr-clone" -ErrorAction SilentlyContinue
+if ($running) {
+    Write-Host "Stopping running wispr-clone.exe (PID $($running.Id -join ', ')) before rebuild..."
+    $running | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 800
+}
+
+function Remove-PathWithRetry {
+    param([string]$Path, [int]$Attempts = 5)
+    if (-not (Test-Path $Path)) { return }
+    for ($i = 1; $i -le $Attempts; $i++) {
+        try {
+            Remove-Item -Recurse -Force -ErrorAction Stop -LiteralPath $Path
+            return
+        } catch {
+            if ($i -eq $Attempts) {
+                Write-Error "Failed to remove '$Path' after $Attempts attempts. Close any process holding files inside it (Explorer preview pane, antivirus scan, the .exe itself) and retry.`n$_"
+                exit 1
+            }
+            Start-Sleep -Milliseconds (300 * $i)
+        }
+    }
+}
+
 # Clean previous build artifacts so stale files don't shadow new ones.
-if (Test-Path "build")  { Remove-Item -Recurse -Force "build" }
-if (Test-Path "dist")   { Remove-Item -Recurse -Force "dist" }
+Remove-PathWithRetry "build"
+Remove-PathWithRetry "dist"
 Get-ChildItem -Filter "*.spec" | Remove-Item -Force -ErrorAction SilentlyContinue
 
 # Use the root-level launcher as the entry. It does

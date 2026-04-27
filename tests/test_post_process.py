@@ -45,3 +45,33 @@ def test_only_fillers_returns_empty():
 
 def test_preserves_apostrophe_words():
     assert strip_fillers("I'm uh going home.") == "I'm going home."
+
+
+# ---------------- Cantonese ----------------
+
+def test_yue_strips_single_syllable_filler():
+    assert strip_fillers("嗯今日好攰", lang="yue") == "今日好攰"
+
+
+def test_yue_strips_stretched_filler():
+    # `啊` is intentionally NOT in the filler list because it's a common
+    # sentence-final particle — only `嗯`, `呃`, `噉` are stripped.
+    assert strip_fillers("嗯嗯嗯我哋走啦", lang="yue") == "我哋走啦"
+
+
+def test_yue_strips_multi_char_filler():
+    assert strip_fillers("我即係想話畀你聽", lang="yue") == "我想話畀你聽"
+
+
+def test_yue_preserves_question_particle_ah():
+    # `啊` survives — it carries meaning in Cantonese.
+    assert strip_fillers("好啊", lang="yue") == "好啊"
+
+
+def test_yue_collapses_full_width_commas():
+    assert strip_fillers("好嘢，，，今日", lang="yue") == "好嘢,今日"
+
+
+def test_en_lang_default_unchanged():
+    # Existing English path is the default lang.
+    assert strip_fillers("um hello") == "Hello"
