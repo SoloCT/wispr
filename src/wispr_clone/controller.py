@@ -16,12 +16,13 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from .audio_capture import AudioCapture
+from .brands import canonicalize_brands, combined_brands
 from .config import Config, save_config
 from .dictionary import CANTONESE_PRIMING, build_prompt, load_terms
 from .hud import HUD
 from .lang import Language, whisper_code
 from .paste import paste
-from .paths import user_dictionary_path, user_usage_log_path
+from .paths import user_brands_dictionary_path, user_dictionary_path, user_usage_log_path
 from .post_process import strip_fillers
 from .structure import apply_structure
 from .transcribe import Transcriber
@@ -176,12 +177,20 @@ class Controller:
             try:
                 dict_path = user_dictionary_path(language.value)
                 terms = load_terms(dict_path)
+                # English: append the bundled+user brand list to the prompt
+                # for Whisper biasing, and remember it for the post-pass
+                # canonicalization. Cantonese path skips both.
+                brands_list: list[str] = []
+                if language is Language.EN:
+                    brands_list = combined_brands(user_brands_dictionary_path())
+                    terms = terms + brands_list
                 prefix = CANTONESE_PRIMING if language is Language.YUE else ""
                 prompt = build_prompt(terms, prefix=prefix)
                 whisper_lang = whisper_code(language)
                 log.info(
-                    "transcribe: lang=%s whisper_lang=%s dict=%s prompt_len=%d audio_s=%.2f",
-                    language.value, whisper_lang or "auto", dict_path.name, len(prompt), audio_seconds,
+                    "transcribe: lang=%s whisper_lang=%s dict=%s prompt_len=%d audio_s=%.2f brands=%d",
+                    language.value, whisper_lang or "auto", dict_path.name,
+                    len(prompt), audio_seconds, len(brands_list),
                 )
                 t = time.perf_counter()
                 text = self._transcriber.transcribe(
@@ -193,6 +202,8 @@ class Controller:
                 log.info("transcribe result (len=%d): %r", len(text), text[:120])
                 t = time.perf_counter()
                 text = strip_fillers(text, lang=language.value)
+                if brands_list:
+                    text = canonicalize_brands(text, brands_list)
                 ms_fillers = (time.perf_counter() - t) * 1000.0
                 if self._smart_cleanup_enabled:
                     t = time.perf_counter()

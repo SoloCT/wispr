@@ -59,6 +59,12 @@ def user_dictionary_path(lang: str = "en") -> Path:
     return user_data_dir() / f"dictionary-{lang}.txt"
 
 
+def user_brands_dictionary_path() -> Path:
+    """User-supplied English brand overrides. Merged with the bundled
+    `assets/brands-en.txt` at runtime; user entries win on case collision."""
+    return user_data_dir() / "dictionary-brands-en.txt"
+
+
 def legacy_dictionary_path() -> Path:
     """Pre-bilingual single-file location, kept only for one-time migration."""
     return user_data_dir() / "dictionary.txt"

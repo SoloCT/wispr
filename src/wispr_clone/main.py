@@ -13,6 +13,7 @@ from .hotkey_dialog import HotkeyDialog
 from .hud import HUD
 from .paths import (
     legacy_dictionary_path,
+    user_brands_dictionary_path,
     user_config_path,
     user_data_dir,
     user_dictionary_path,
@@ -62,11 +63,23 @@ _YUE_DICT_TEMPLATE = (
     "# 茶餐廳\n"
 )
 
+_BRANDS_OVERRIDE_TEMPLATE = (
+    "# Personal English brand-name overrides for wispr-clone.\n"
+    "# One brand per line, with the canonical casing you want output.\n"
+    "# Lines starting with # are comments. Entries here are merged with\n"
+    "# the bundled brand list and win on case collision, so you can\n"
+    "# override casing or add brands with ambiguous English-word\n"
+    "# collisions (Apple, Amazon, Meta) that the bundled list omits.\n"
+    "# Examples:\n"
+    "# MyCompany\n"
+    "# MyProductName\n"
+)
 
-def _ensure_dictionaries(en_path: Path, yue_path: Path) -> None:
-    """Bootstrap per-language dictionary files. Migrates the legacy
-    single `dictionary.txt` to `dictionary-en.txt` on first run if the
-    English file does not yet exist."""
+
+def _ensure_dictionaries(en_path: Path, yue_path: Path, brands_en_path: Path) -> None:
+    """Bootstrap per-language dictionary files plus the user brand-override
+    file. Migrates the legacy single `dictionary.txt` to `dictionary-en.txt`
+    on first run if the English file does not yet exist."""
     legacy = legacy_dictionary_path()
     if legacy.exists() and not en_path.exists():
         try:
@@ -78,6 +91,8 @@ def _ensure_dictionaries(en_path: Path, yue_path: Path) -> None:
         en_path.write_text(_EN_DICT_TEMPLATE, encoding="utf-8")
     if not yue_path.exists():
         yue_path.write_text(_YUE_DICT_TEMPLATE, encoding="utf-8")
+    if not brands_en_path.exists():
+        brands_en_path.write_text(_BRANDS_OVERRIDE_TEMPLATE, encoding="utf-8")
 
 
 def _find_env_path() -> Path:
@@ -103,6 +118,7 @@ def main() -> int:
     config_path = user_config_path()
     dict_en_path = user_dictionary_path("en")
     dict_yue_path = user_dictionary_path("yue")
+    brands_en_path = user_brands_dictionary_path()
     log_path = user_log_path()
     env_path = _find_env_path()
 
@@ -117,7 +133,7 @@ def main() -> int:
         return 1
 
     cfg = load_config(config_path)
-    _ensure_dictionaries(dict_en_path, dict_yue_path)
+    _ensure_dictionaries(dict_en_path, dict_yue_path, brands_en_path)
     transcriber = Transcriber(api_key)
 
     tk_root = tk.Tk()
@@ -201,7 +217,7 @@ def main() -> int:
         tk_root.after(0, lambda: UsageDialog(parent=tk_root, usage_path=user_usage_log_path()))
 
     tray = Tray(
-        dictionary_paths={"en": dict_en_path, "yue": dict_yue_path},
+        dictionary_paths={"en": dict_en_path, "yue": dict_yue_path, "brands_en": brands_en_path},
         on_configure_hotkey_en=on_configure_hotkey_en,
         on_configure_hotkey_yue=on_configure_hotkey_yue,
         on_toggle_smart_cleanup=on_toggle_smart_cleanup,

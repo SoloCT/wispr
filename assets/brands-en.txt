@@ -1,0 +1,109 @@
+# Bundled English brand-name list for wispr-clone.
+# One brand per line, written with the canonical casing you want output.
+# Lines starting with # are comments. Blank lines are ignored.
+#
+# Curation policy: pure-tech / unambiguous brands only. Common-English-word
+# brands (Apple, Amazon, Meta, Square) are intentionally excluded — they
+# false-positive on normal prose. Add those to your personal
+# %APPDATA%\wispr-clone\dictionary-brands-en.txt if you want them.
+
+# AI / ML
+OpenAI
+ChatGPT
+GPT
+Claude
+Anthropic
+Gemini
+Llama
+Mistral
+Hugging Face
+LangChain
+LlamaIndex
+Cohere
+Perplexity
+Midjourney
+Stable Diffusion
+DALL-E
+
+# Dev tools / IDEs
+GitHub
+GitLab
+Bitbucket
+VS Code
+JetBrains
+IntelliJ
+PyCharm
+WebStorm
+Cursor
+Zed
+Vim
+Neovim
+Emacs
+
+# Languages / frameworks
+JavaScript
+TypeScript
+Python
+Rust
+Golang
+Kotlin
+Swift
+React
+Vue
+Angular
+Svelte
+Next.js
+Node.js
+Deno
+Bun
+Tailwind
+GraphQL
+
+# Cloud / infra
+AWS
+Azure
+GCP
+Cloudflare
+Vercel
+Netlify
+Heroku
+Docker
+Kubernetes
+Terraform
+Ansible
+MongoDB
+PostgreSQL
+MySQL
+Redis
+Elasticsearch
+Snowflake
+Databricks
+
+# SaaS / apps
+Slack
+Notion
+Figma
+Linear
+Jira
+Confluence
+Zoom
+Discord
+Stripe
+Shopify
+Hydrogen
+Twilio
+SendGrid
+
+# Hardware / OS (low ambiguity)
+iPhone
+iPad
+iMac
+MacBook
+AirPods
+Android
+Windows
+Linux
+ChromeOS
+Ubuntu
+Debian
+Fedora
